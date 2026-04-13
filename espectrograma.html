@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Espectrograma y Generación de Video</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            height: 100vh;
+            background-color: #282c34;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+
+        canvas {
+            background: #1c1e22;
+            border-radius: 15px; /* Bordes redondeados del canvas */
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+        }
+
+        #audio-upload, #generate-video {
+            margin-top: 20px;
+            background-color: #fff;
+            border: none;
+            color: #141414;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        #audio-upload:hover,
+        #generate-video:hover {
+            background-color: #141414;
+            color: #fff;
+        }
+
+        #recording-message {
+            margin-top: 10px;
+            font-size: 18px;
+            color: yellow;
+            display: none; /* Inicialmente oculto */
+        }
+    </style>
+</head>
+<body>
+    <canvas id="visualizer" width="800" height="400"></canvas>
+    <input type="file" id="audio-upload" accept="audio/*">
+    <button id="generate-video" disabled>Generar Video</button>
+    <div id="recording-message">Grabando... (Video en formato WebM)</div> <!-- Mensaje de grabación -->
+
+    <script>
+        const canvas = document.getElementById('visualizer');
+        const ctx = canvas.getContext('2d');
+        const audioUpload = document.getElementById('audio-upload');
+        const generateVideoButton = document.getElementById('generate-video');
+        const recordingMessage = document.getElementById('recording-message'); // Mensaje de grabación
+        let audioContext, analyser, source, mediaRecorder, recordedChunks = [];
+
+        audioUpload.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                if (audioContext) {
+                    audioContext.close();
+                }
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                audioContext.decodeAudioData(event.target.result, function(buffer) {
+                    source = audioContext.createBufferSource();
+                    source.buffer = buffer;
+
+                    analyser = audioContext.createAnalyser();
+                    source.connect(analyser);
+                    analyser.connect(audioContext.destination);
+                    visualize();
+
+                    // Configuración de grabación
+                    const stream = canvas.captureStream(30); // Captura a 30 fps
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.ondataavailable = function(e) {
+                        recordedChunks.push(e.data);
+                    };
+                    mediaRecorder.onstop = function() {
+                        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'espectrograma.webm';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        recordingMessage.style.display = 'none'; // Ocultar mensaje de grabación
+                    };
+
+                    // Comenzar la grabación y reproducción
+                    mediaRecorder.start();
+                    recordingMessage.style.display = 'block'; // Mostrar mensaje de grabación
+                    source.start(0);
+                    source.onended = () => {
+                        mediaRecorder.stop(); // Detener la grabación cuando el audio finaliza
+                    };
+
+                    console.log("Audio loaded and playing");
+                    generateVideoButton.disabled = false; // Habilitar el botón después de cargar el audio
+                }, function(error) {
+                    console.error("Error decoding audio data: ", error);
+                });
+            };
+
+            reader.readAsArrayBuffer(file);
+        });
+
+        function visualize() {
+            analyser.fftSize = 512; // Aumentar la resolución del espectro
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            canvas.width = window.innerWidth;
+            canvas.height = 400;
+
+            function draw() {
+                analyser.getByteFrequencyData(dataArray);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                const barWidth = (canvas.width / bufferLength) * 2.5; // Ajustar el ancho de las barras
+                let x = 0;
+
+                for (let i = 0; i < bufferLength; i++) {
+                    const barHeight = dataArray[i]; // Usar el valor original sin límite
+                    ctx.fillStyle = 'rgb(255, 255, 255)'; // Color blanco sin opacidad
+                    ctx.beginPath();
+                    ctx.moveTo(x + 10, canvas.height - barHeight); // Bordes redondeados
+                    ctx.lineTo(x + barWidth - 10, canvas.height - barHeight);
+                    ctx.quadraticCurveTo(x + barWidth, canvas.height - barHeight, x + barWidth, canvas.height - barHeight + 10);
+                    ctx.lineTo(x + barWidth, canvas.height);
+                    ctx.lineTo(x, canvas.height);
+                    ctx.lineTo(x, canvas.height - barHeight + 10);
+                    ctx.quadraticCurveTo(x, canvas.height - barHeight, x + 10, canvas.height - barHeight);
+                    ctx.fill();
+                    x += barWidth + 1; // Ajustar el espaciado
+                }
+            }
+
+            setInterval(draw, 1000 / 30);
+        }
+    </script>
+</body>
+</html>
