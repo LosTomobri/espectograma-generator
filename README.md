@@ -1,6 +1,7 @@
 # Espectograma generator
 
 Permite generar un video del espectograma de una cancion
+[![Entra Aqui](https://img.shields.io/badge/Jugar-Ahora-purple?style=for-the-badge&logo=gamepad)][(https://lostomobri.github.io/espectograma-generator.github.io/)]
 
 # Como utilizarlo
 
